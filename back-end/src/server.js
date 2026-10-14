@@ -4,7 +4,7 @@ import connectDB from "./config/db.js";
 
 await connectDB();
 app.listen(process.env.PORT, () =>
-  console.log(`Server on ${process.env.PORT}`),
+  console.log(`Server run on port ${process.env.PORT}`),
 );
 
 // https://github.com/GuessoumNoufel/SupplyLink.git
