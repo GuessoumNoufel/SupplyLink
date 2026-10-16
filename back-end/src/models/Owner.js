@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const ownerSchema = new mongoose.Schema(
   {
     // set by admin
+    label: { type: String, required: true, trim: true, unique: true },
     subscriptionType: { type: String, enum: ["pro", "ultra"], required: true },
     periodMonths: { type: Number, enum: [1, 3, 6, 12], default: 1 },
     status: {
@@ -29,7 +30,16 @@ const ownerSchema = new mongoose.Schema(
     currency: { type: String, enum: ["DZD", "USD", "EUR"], default: "DZD" },
     profileCompleted: { type: Boolean, default: false },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (doc, ret) => {
+        delete ret.password;
+        delete ret.__v;
+        return ret;
+      },
+    },
+  },
 );
 
 export default mongoose.model("Owner", ownerSchema);
