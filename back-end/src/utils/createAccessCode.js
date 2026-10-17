@@ -1,7 +1,13 @@
 import AccessCode from "../models/AccessCode.js";
 import { generateCode, CODE_LENGTH } from "./generateCode.js";
 
-export async function createAccessCode({ type, owner, client, expiresInDays }) {
+export async function createAccessCode({
+  periodMonths,
+  type,
+  owner,
+  client,
+  expiresInDays,
+}) {
   const expiresAt = expiresInDays
     ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
     : null;
@@ -14,6 +20,7 @@ export async function createAccessCode({ type, owner, client, expiresInDays }) {
         type,
         owner,
         client,
+        periodMonths,
         expiresAt,
       });
     } catch (err) {

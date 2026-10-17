@@ -18,6 +18,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 import adminRoutes from "./routes/admin.js";
 import ownerRoutes from "./routes/owner.js";
+
 // 1/ routers
 
 app.use("/api/admin", adminRoutes);

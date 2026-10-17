@@ -41,6 +41,7 @@ export const createOwner = async (req, res, next) => {
   const code = await createAccessCode({
     type: "activation",
     owner: owner._id,
+    periodMonths: Number(periodMonths),
     expiresInDays: ACTIVATION_VALID_DAYS,
   });
 

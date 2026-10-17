@@ -13,6 +13,7 @@ const accessCodeSchema = new mongoose.Schema(
       ref: "Owner",
       required: true,
     },
+    periodMonths: { type: Number, enum: [1, 3, 6, 12], default: null },
     client: { type: mongoose.Schema.Types.ObjectId, ref: "Client" }, // for invites
     usedAt: { type: Date, default: null },
     expiresAt: { type: Date, default: null },
