@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs";
 import Admin from "../models/Admin.js";
 import { signToken, revokeToken, cookieOptions } from "../utils/token.js";
+import { failAttempt, clearFailures } from "../utils/attemptLock.js";
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   const { email, password } = req.body || {};
 
   if (
@@ -18,8 +19,14 @@ export const login = async (req, res) => {
     email: email.toLowerCase().trim(),
   }).select("+password");
   const ok = admin && (await bcrypt.compare(password, admin.password));
+
+  // if (!ok)
+  //   return res.status(401).json({ message: "Invalid email or password" });
+
   if (!ok)
-    return res.status(401).json({ message: "Invalid email or password" });
+    return next(await failAttempt(req, "Invalid email or password", 401));
+
+  await clearFailures(req.lockKey);
 
   res.cookie("token", signToken(admin._id, "admin"), cookieOptions);
   res.json({ message: "Logged in", role: "admin" });

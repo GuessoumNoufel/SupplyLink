@@ -28,6 +28,7 @@ export default function errorHandler(err, req, res, next) {
 
   res.status(statusCode).json({
     message: error.isOperational ? error.message : "Server error",
+    ...(error.isOperational && error.errorCode && { code: error.errorCode }),
     ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
   });
 }

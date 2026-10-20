@@ -9,6 +9,56 @@ import EmailVerification from "../models/EmailVerification.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { isValidEmail, hasMailServer } from "../utils/validEmail.js";
 import { randomInt } from "node:crypto";
+import { getSubscriptionState } from "../utils/subscription.js";
+import { failAttempt, clearFailures } from "../utils/attemptLock.js";
+
+export const renew = async (req, res, next) => {
+  const raw = req.body?.code;
+  if (!isStr(raw)) return next(new AppError("Code is required", 400));
+
+  const owner = await Owner.findById(req.user.id);
+  if (!owner) return next(new AppError("Owner not found", 401));
+  if (owner.status === "frozen") {
+    return next(
+      new AppError(
+        "Account is frozen, contact support",
+        403,
+        "SUBSCRIPTION_EXPIRED",
+      ),
+    );
+  }
+
+  // the code must be a renewal code created for THIS owner
+  const record = await findValidCode(
+    raw.trim().toUpperCase(),
+    "renewal",
+    owner._id,
+  );
+  // if (!record) return next(new AppError(INVALID_CODE, 400));
+  if (!record) return next(await failAttempt(req, INVALID_CODE, 400));
+
+  const consumed = await AccessCode.findOneAndUpdate(
+    { _id: record._id, usedAt: null },
+    { usedAt: new Date() },
+  );
+  if (!consumed) return next(new AppError(INVALID_CODE, 400));
+
+  try {
+    const now = new Date();
+    const base =
+      owner.validUntil && owner.validUntil > now ? owner.validUntil : now;
+    owner.validUntil = addMonths(base, record.periodMonths);
+    await owner.save();
+    await clearFailures(req.lockKey);
+    res.json({
+      message: "Subscription renewed",
+      subscription: getSubscriptionState(owner),
+    });
+  } catch (err) {
+    await AccessCode.updateOne({ _id: record._id }, { usedAt: null });
+    next(err);
+  }
+};
 
 export const sendEmailCode = async (req, res, next) => {
   const { code, email } = req.body || {};
@@ -18,7 +68,7 @@ export const sendEmailCode = async (req, res, next) => {
 
   // only someone holding a valid activation code can trigger emails (anti-abuse)
   if (!(await findValidCode(code.trim().toUpperCase(), "activation"))) {
-    return next(new AppError(INVALID_CODE, 400));
+    return next(await failAttempt(req, INVALID_CODE, 400));
   }
 
   if (!isValidEmail(email) || !(await hasMailServer(email))) {
@@ -103,7 +153,7 @@ export const verifyCode = async (req, res, next) => {
   if (!isStr(raw)) return next(new AppError("Code is required", 400));
 
   const record = await findValidCode(raw.trim().toUpperCase(), "activation");
-  if (!record) return next(new AppError(INVALID_CODE, 400));
+  if (!record) return next(await failAttempt(req, INVALID_CODE, 400));
 
   res.json({ valid: true });
 };
@@ -197,7 +247,7 @@ export const activate = async (req, res, next) => {
 
   // 2. the activation code must be valid and unused
   const record = await findValidCode(code.trim().toUpperCase(), "activation");
-  if (!record) return next(new AppError(INVALID_CODE, 400));
+  if (!record) return next(await failAttempt(req, INVALID_CODE, 400));
   if (!record.periodMonths) {
     return next(
       new AppError(
@@ -233,6 +283,7 @@ export const activate = async (req, res, next) => {
     });
     await owner.save();
     await EmailVerification.deleteOne({ _id: verified._id });
+    await clearFailures(req.lockKey);
 
     res.cookie("token", signToken(owner._id, "owner"), cookieOptions);
     res.status(201).json(owner); // password is stripped by the toJSON transform
@@ -256,10 +307,13 @@ export const login = async (req, res, next) => {
     owner &&
     owner.profileCompleted &&
     (await bcrypt.compare(password, owner.password));
-  if (!ok) return next(new AppError("Invalid email or password", 401));
+  if (!ok)
+    return next(await failAttempt(req, "Invalid email or password", 401));
+
+  await clearFailures(req.lockKey);
 
   res.cookie("token", signToken(owner._id, "owner"), cookieOptions);
-  res.json(cleanOwner(owner));
+  res.json({ ...owner.toJSON(), subscription: getSubscriptionState(owner) });
 };
 
 export const logout = async (req, res) => {
@@ -268,8 +322,13 @@ export const logout = async (req, res) => {
   res.json({ message: "Logged out" });
 };
 
+// export const me = async (req, res, next) => {
+//   const owner = await Owner.findById(req.user.id);
+//   if (!owner) return next(new AppError("Owner not found", 401));
+//   res.json(cleanOwner(owner));
+// };
 export const me = async (req, res, next) => {
   const owner = await Owner.findById(req.user.id);
   if (!owner) return next(new AppError("Owner not found", 401));
-  res.json(cleanOwner(owner));
+  res.json({ ...owner.toJSON(), subscription: getSubscriptionState(owner) });
 };
